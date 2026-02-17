@@ -3,32 +3,41 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Task } from '../../types';
 import { Avatar } from '../Common';
-import { Calendar, MessageSquare, GripVertical } from 'lucide-react';
+import { Calendar, MessageSquare, GripVertical, Paperclip, CheckSquare } from 'lucide-react';
 
 interface TaskCardProps {
   task: Task;
   onClick: () => void;
 }
 
-const priorityColors = {
-  low: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  medium: 'bg-blue-50 text-blue-700 border-blue-200',
-  high: 'bg-orange-50 text-orange-700 border-orange-200',
-  urgent: 'bg-red-50 text-red-700 border-red-200',
+/* ── Priority config ─────────────────────────────────────────── */
+const priorityConfig = {
+  low:    { bar: 'bg-emerald-400', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200/80', dot: 'bg-emerald-400', label: 'Low'    },
+  medium: { bar: 'bg-blue-500',    badge: 'bg-blue-50 text-blue-700 border-blue-200/80',          dot: 'bg-blue-500',    label: 'Medium' },
+  high:   { bar: 'bg-orange-500',  badge: 'bg-orange-50 text-orange-700 border-orange-200/80',    dot: 'bg-orange-500',  label: 'High'   },
+  urgent: { bar: 'bg-red-500',     badge: 'bg-red-50 text-red-700 border-red-200/80',             dot: 'bg-red-500',     label: 'Urgent' },
 };
 
-const priorityBorders = {
-  low: 'border-l-emerald-400',
-  medium: 'border-l-blue-500',
-  high: 'border-l-orange-500',
-  urgent: 'border-l-red-500',
-};
+/* Label color cycling ─────────────────────────────────────────── */
+const labelPalette = [
+  'bg-violet-50 text-violet-700 border-violet-200/80',
+  'bg-sky-50 text-sky-700 border-sky-200/80',
+  'bg-pink-50 text-pink-700 border-pink-200/80',
+  'bg-amber-50 text-amber-700 border-amber-200/80',
+  'bg-teal-50 text-teal-700 border-teal-200/80',
+];
 
-const priorityDots = {
-  low: 'bg-emerald-500',
-  medium: 'bg-blue-500',
-  high: 'bg-orange-500',
-  urgent: 'bg-red-500',
+/* Date helper — unchanged logic ─────────────────────────────── */
+const formatDate = (dateString: string) => {
+  const date    = new Date(dateString);
+  const now     = new Date();
+  const diffMs  = date.getTime() - now.getTime();
+  const diffDay = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDay < 0)  return { text: 'Overdue',   cls: 'bg-red-50 text-red-600 border-red-200/70',       icon: '🔴' };
+  if (diffDay === 0) return { text: 'Today',     cls: 'bg-orange-50 text-orange-600 border-orange-200/70', icon: '🟠' };
+  if (diffDay === 1) return { text: 'Tomorrow',  cls: 'bg-yellow-50 text-yellow-600 border-yellow-200/70', icon: '🟡' };
+  return { text: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), cls: 'bg-gray-50 text-gray-500 border-gray-200/70', icon: '📅' };
 };
 
 export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick }) => {
@@ -46,18 +55,17 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick }) => {
     transition,
   };
 
-  const labels = task.labels ? JSON.parse(task.labels) : [];
+  /* Parse labels — same as original */
+  const labels: string[] = task.labels ? JSON.parse(task.labels) : [];
+  const priority = priorityConfig[task.priority] ?? priorityConfig.medium;
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffDays = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    
-    if (diffDays < 0) return { text: 'Overdue', color: 'text-red-600 bg-red-50' };
-    if (diffDays === 0) return { text: 'Today', color: 'text-orange-600 bg-orange-50' };
-    if (diffDays === 1) return { text: 'Tomorrow', color: 'text-yellow-600 bg-yellow-50' };
-    return { text: date.toLocaleDateString(), color: 'text-gray-600 bg-gray-50' };
-  };
+  /* Optional counts — defensive, no backend changes */
+  const commentCount    = task._count?.comments    ?? 0;
+  const attachmentCount = (task as any)._count?.attachments ?? 0;
+  const checklistTotal  = (task as any)._count?.checklistItems ?? 0;
+  const checklistDone   = (task as any)._count?.completedChecklistItems ?? 0;
+
+  const dueInfo = task.dueDate ? formatDate(task.dueDate) : null;
 
   return (
     <div
@@ -66,90 +74,126 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick }) => {
       {...attributes}
       onClick={onClick}
       className={`
-        group bg-white rounded-xl shadow-soft border border-gray-100
-        border-l-[3px] ${priorityBorders[task.priority]}
-        p-3.5 cursor-pointer
-        hover:shadow-soft-md hover:border-gray-200 
-        transition-all duration-200 ease-smooth
-        ${isDragging ? 'opacity-60 shadow-soft-lg scale-[1.02] rotate-1' : ''}
+        relative group bg-white rounded-xl border border-gray-100/80 cursor-pointer select-none
+        transition-all duration-200 ease-out overflow-hidden
+        ${isDragging
+          ? 'opacity-50 shadow-2xl scale-[1.03] rotate-1 border-primary-200'
+          : 'shadow-[0_1px_3px_rgba(0,0,0,0.06)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)] hover:-translate-y-0.5 hover:border-gray-200'
+        }
       `}
     >
-      {/* Drag handle - visible on hover */}
-      <div 
+      {/* Priority bar — left edge */}
+      <div className={`absolute left-0 top-0 bottom-0 w-[3px] ${priority.bar} rounded-l-xl`} />
+
+      {/* Drag handle — appears on hover, positioned over the bar */}
+      <div
         {...listeners}
-        className="absolute -left-0.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-50 hover:!opacity-100 transition-opacity cursor-grab active:cursor-grabbing"
+        className="absolute left-0 top-0 bottom-0 w-6 flex items-center justify-center
+                   opacity-0 group-hover:opacity-100 transition-opacity duration-150
+                   cursor-grab active:cursor-grabbing z-10"
+        onClick={(e) => e.stopPropagation()}
       >
-        <GripVertical className="w-4 h-4 text-gray-400" />
+        <GripVertical className="w-3.5 h-3.5 text-white drop-shadow-sm" />
       </div>
 
-      {/* Labels */}
-      {labels.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-2.5">
-          {labels.slice(0, 3).map((label: string, index: number) => (
-            <span
-              key={index}
-              className="px-2 py-0.5 text-xs font-medium rounded-md bg-primary-50 text-primary-700 border border-primary-100"
-            >
-              {label}
-            </span>
-          ))}
-          {labels.length > 3 && (
-            <span className="px-2 py-0.5 text-xs font-medium rounded-md bg-gray-100 text-gray-600">
-              +{labels.length - 3}
-            </span>
-          )}
-        </div>
-      )}
+      {/* Card body */}
+      <div className="pl-4 pr-3 pt-3 pb-3">
 
-      {/* Title */}
-      <h4 className="text-sm font-medium text-gray-900 mb-3 leading-snug">{task.title}</h4>
-
-      {/* Footer */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Priority indicator */}
-          <div className="flex items-center gap-1.5">
-            <span className={`w-2 h-2 rounded-full ${priorityDots[task.priority]}`} />
-            <span className="text-xs text-gray-500 capitalize">{task.priority}</span>
+        {/* Labels row */}
+        {labels.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-2.5">
+            {labels.slice(0, 3).map((label, i) => (
+              <span
+                key={i}
+                className={`px-1.5 py-px text-[10px] font-semibold rounded border tracking-wide ${labelPalette[i % labelPalette.length]}`}
+              >
+                {label}
+              </span>
+            ))}
+            {labels.length > 3 && (
+              <span className="px-1.5 py-px text-[10px] font-semibold rounded border bg-gray-50 text-gray-500 border-gray-200/80">
+                +{labels.length - 3}
+              </span>
+            )}
           </div>
+        )}
 
-          {/* Due Date */}
-          {task.dueDate && (
-            <span className={`flex items-center text-xs px-1.5 py-0.5 rounded ${formatDate(task.dueDate).color}`}>
-              <Calendar className="w-3 h-3 mr-1" />
-              {formatDate(task.dueDate).text}
+        {/* Title */}
+        <p className="text-[13px] font-semibold text-gray-800 leading-snug mb-3 group-hover:text-gray-900 transition-colors">
+          {task.title}
+        </p>
+
+        {/* Meta pills row */}
+        <div className="flex flex-wrap items-center gap-1.5 mb-3">
+
+          {/* Priority badge */}
+          <span className={`inline-flex items-center gap-1 px-1.5 py-px text-[10px] font-semibold rounded border ${priority.badge}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${priority.dot}`} />
+            {priority.label}
+          </span>
+
+          {/* Due date */}
+          {dueInfo && (
+            <span className={`inline-flex items-center gap-1 px-1.5 py-px text-[10px] font-semibold rounded border ${dueInfo.cls}`}>
+              <Calendar className="w-2.5 h-2.5" />
+              {dueInfo.text}
             </span>
           )}
 
           {/* Comments */}
-          {task._count && task._count.comments > 0 && (
-            <span className="flex items-center text-xs text-gray-500 gap-1">
-              <MessageSquare className="w-3.5 h-3.5" />
-              {task._count.comments}
+          {commentCount > 0 && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-px text-[10px] font-semibold rounded border bg-gray-50 text-gray-500 border-gray-200/80">
+              <MessageSquare className="w-2.5 h-2.5" />
+              {commentCount}
+            </span>
+          )}
+
+          {/* Attachments (shown if backend returns it) */}
+          {attachmentCount > 0 && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-px text-[10px] font-semibold rounded border bg-gray-50 text-gray-500 border-gray-200/80">
+              <Paperclip className="w-2.5 h-2.5" />
+              {attachmentCount}
+            </span>
+          )}
+
+          {/* Checklist progress (shown if backend returns it) */}
+          {checklistTotal > 0 && (
+            <span className={`inline-flex items-center gap-1 px-1.5 py-px text-[10px] font-semibold rounded border ${
+              checklistDone === checklistTotal
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80'
+                : 'bg-gray-50 text-gray-500 border-gray-200/80'
+            }`}>
+              <CheckSquare className="w-2.5 h-2.5" />
+              {checklistDone}/{checklistTotal}
             </span>
           )}
         </div>
 
-        {/* Assignees */}
+        {/* Footer — assignees */}
         {task.assignees && task.assignees.length > 0 && (
-          <div className="flex -space-x-1.5">
-            {task.assignees.slice(0, 3).map((assignee) => (
-              <Avatar
-                key={assignee.id}
-                name={assignee.user.name}
-                src={assignee.user.avatar}
-                size="xs"
-                className="ring-2 ring-white"
-              />
-            ))}
-            {task.assignees.length > 3 && (
-              <div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-[10px] font-semibold text-gray-600 ring-2 ring-white">
-                +{task.assignees.length - 3}
-              </div>
-            )}
+          <div className="flex items-center justify-end">
+            <div className="flex -space-x-1.5">
+              {task.assignees.slice(0, 4).map((assignee) => (
+                <Avatar
+                  key={assignee.id}
+                  name={assignee.user.name}
+                  src={assignee.user.avatar}
+                  size="xs"
+                  className="ring-2 ring-white hover:scale-110 hover:z-10 transition-transform duration-150"
+                />
+              ))}
+              {task.assignees.length > 4 && (
+                <div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-[9px] font-bold text-gray-500 ring-2 ring-white">
+                  +{task.assignees.length - 4}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
+
+      {/* Hover shimmer — subtle right-edge glow */}
+      <div className="absolute inset-0 bg-gradient-to-l from-primary-50/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none rounded-xl" />
     </div>
   );
 };

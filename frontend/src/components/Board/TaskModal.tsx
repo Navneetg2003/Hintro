@@ -2,45 +2,37 @@ import React, { useState, useEffect } from 'react';
 import { useAppDispatch, useAppSelector } from '../../store';
 import { updateTask, deleteTask } from '../../store/slices/boardSlice';
 import { closeTaskModal } from '../../store/slices/uiSlice';
-import { Modal, Button, Input, Avatar } from '../Common';
+import { Modal, Button, Avatar } from '../Common';
 import { api } from '../../services/api';
-import { Task, Comment, User } from '../../types';
+import { Task, Comment } from '../../types';
 import toast from 'react-hot-toast';
 import {
-  Calendar,
-  Users,
-  MessageSquare,
-  Trash2,
-  Flag,
-  Send,
-  CheckCircle2,
-  AlertCircle,
-  AlertTriangle,
-  Zap,
-  FileText,
-  UserPlus,
+  Calendar, Users, MessageSquare, Trash2, Flag,
+  Send, CheckCircle2, AlertCircle, AlertTriangle,
+  Zap, FileText, UserPlus, X,
 } from 'lucide-react';
 
+/* ── Priority config ───────────────────────────────────── */
 const priorityOptions = [
-  { value: 'low', label: 'Low', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: CheckCircle2 },
-  { value: 'medium', label: 'Medium', color: 'bg-blue-50 text-blue-700 border-blue-200', icon: AlertCircle },
-  { value: 'high', label: 'High', color: 'bg-orange-50 text-orange-700 border-orange-200', icon: AlertTriangle },
-  { value: 'urgent', label: 'Urgent', color: 'bg-red-50 text-red-700 border-red-200', icon: Zap },
+  { value: 'low',    label: 'Low',    icon: CheckCircle2,  bar: 'bg-emerald-500', pill: 'bg-emerald-50 text-emerald-700 border-emerald-200', ring: 'ring-emerald-400' },
+  { value: 'medium', label: 'Medium', icon: AlertCircle,   bar: 'bg-blue-500',    pill: 'bg-blue-50 text-blue-700 border-blue-200',           ring: 'ring-blue-400'    },
+  { value: 'high',   label: 'High',   icon: AlertTriangle, bar: 'bg-orange-500',  pill: 'bg-orange-50 text-orange-700 border-orange-200',      ring: 'ring-orange-400'  },
+  { value: 'urgent', label: 'Urgent', icon: Zap,           bar: 'bg-red-500',     pill: 'bg-red-50 text-red-700 border-red-200',               ring: 'ring-red-400'     },
 ];
 
 export const TaskModal: React.FC = () => {
-  const dispatch = useAppDispatch();
-  const { taskModalOpen, selectedTask } = useAppSelector((state) => state.ui);
-  const currentBoard = useAppSelector((state) => state.boards.currentBoard);
-  
-  const [title, setTitle] = useState('');
+  const dispatch       = useAppDispatch();
+  const { taskModalOpen, selectedTask } = useAppSelector((s) => s.ui);
+  const currentBoard   = useAppSelector((s) => s.boards.currentBoard);
+
+  const [title,       setTitle]       = useState('');
   const [description, setDescription] = useState('');
-  const [priority, setPriority] = useState<string>('medium');
-  const [dueDate, setDueDate] = useState('');
-  const [comments, setComments] = useState<Comment[]>([]);
-  const [newComment, setNewComment] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [priority,    setPriority]    = useState('medium');
+  const [dueDate,     setDueDate]     = useState('');
+  const [comments,    setComments]    = useState<Comment[]>([]);
+  const [newComment,  setNewComment]  = useState('');
+  const [isLoading,   setIsLoading]   = useState(false);
+  const [isSaving,    setIsSaving]    = useState(false);
 
   useEffect(() => {
     if (selectedTask) {
@@ -48,351 +40,338 @@ export const TaskModal: React.FC = () => {
       setDescription(selectedTask.description || '');
       setPriority(selectedTask.priority);
       setDueDate(selectedTask.dueDate ? selectedTask.dueDate.split('T')[0] : '');
-      
-      // Fetch full task details including comments
       fetchTaskDetails();
     }
   }, [selectedTask]);
 
   const fetchTaskDetails = async () => {
     if (!selectedTask) return;
-    
     try {
       const task = await api.getTask(selectedTask.id);
       setComments(task.comments || []);
-    } catch (error) {
-      console.error('Failed to fetch task details:', error);
-    }
+    } catch { /* silent */ }
   };
 
-  const handleClose = () => {
-    dispatch(closeTaskModal());
-  };
+  const handleClose = () => dispatch(closeTaskModal());
 
   const handleSave = async () => {
     if (!selectedTask) return;
-
     setIsSaving(true);
     try {
-      await dispatch(
-        updateTask({
-          id: selectedTask.id,
-          data: {
-            title: title.trim(),
-            description: description.trim() || null,
-            priority,
-            dueDate: dueDate || null,
-          },
-        })
-      ).unwrap();
+      await dispatch(updateTask({
+        id: selectedTask.id,
+        data: { title: title.trim(), description: description.trim() || null, priority, dueDate: dueDate || null },
+      })).unwrap();
       toast.success('Task updated');
-    } catch (error) {
-      toast.error('Failed to update task');
-    } finally {
-      setIsSaving(false);
-    }
+    } catch { toast.error('Failed to update task'); }
+    finally   { setIsSaving(false); }
   };
 
   const handleDelete = async () => {
-    if (!selectedTask) return;
-    
-    if (!confirm('Are you sure you want to delete this task?')) {
-      return;
-    }
-
+    if (!selectedTask || !confirm('Delete this task?')) return;
     try {
-      await dispatch(
-        deleteTask({ id: selectedTask.id, listId: selectedTask.listId })
-      ).unwrap();
+      await dispatch(deleteTask({ id: selectedTask.id, listId: selectedTask.listId })).unwrap();
       toast.success('Task deleted');
       handleClose();
-    } catch (error) {
-      toast.error('Failed to delete task');
-    }
+    } catch { toast.error('Failed to delete task'); }
   };
 
   const handleAddComment = async () => {
     if (!selectedTask || !newComment.trim()) return;
-
     setIsLoading(true);
     try {
       const comment = await api.addComment(selectedTask.id, newComment.trim());
       setComments([comment, ...comments]);
       setNewComment('');
-      toast.success('Comment added');
-    } catch (error) {
-      toast.error('Failed to add comment');
-    } finally {
-      setIsLoading(false);
-    }
+    } catch { toast.error('Failed to add comment'); }
+    finally   { setIsLoading(false); }
   };
 
   const handleAssign = async (userId: string) => {
     if (!selectedTask) return;
-
     try {
       await api.assignTask(selectedTask.id, userId);
       toast.success('User assigned');
       fetchTaskDetails();
-    } catch (error) {
-      toast.error('Failed to assign user');
-    }
+    } catch { toast.error('Failed to assign user'); }
   };
 
   if (!selectedTask) return null;
 
-  const currentPriority = priorityOptions.find(p => p.value === priority);
-  const PriorityIcon = currentPriority?.icon || Flag;
+  const currentPriority = priorityOptions.find((p) => p.value === priority) ?? priorityOptions[1];
+  const PriorityIcon    = currentPriority.icon;
+
+  const dueDateObj   = dueDate ? new Date(dueDate) : null;
+  const today        = new Date(); today.setHours(0,0,0,0);
+  const dueDiffDays  = dueDateObj ? Math.ceil((dueDateObj.getTime() - today.getTime()) / 86400000) : null;
+  const dueDateColor = dueDiffDays === null ? '' : dueDiffDays < 0 ? 'text-red-600' : dueDiffDays <= 1 ? 'text-orange-600' : 'text-gray-600';
 
   return (
     <Modal isOpen={taskModalOpen} onClose={handleClose} size="lg">
-      <div className="p-4 sm:p-6 pt-8 sm:pt-6">
-        {/* Header */}
-        <div className="mb-6">
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="text-xl sm:text-2xl font-bold text-gray-900 w-full border-0 border-b-2 border-transparent hover:border-gray-200 focus:border-primary-500 focus:outline-none py-2 bg-transparent transition-colors"
-            placeholder="Task title"
-          />
-          <div className="flex items-center gap-2 mt-2">
-            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-              <FileText className="w-3 h-3 mr-1" />
-              {selectedTask.list?.name || 'Unknown list'}
-            </span>
-            {currentPriority && (
-              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${currentPriority.color}`}>
-                <PriorityIcon className="w-3 h-3 mr-1" />
+      <style>{`
+        @keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+        .modal-fade-up { animation: fadeUp 0.25s cubic-bezier(0.16,1,0.3,1) both; }
+      `}</style>
+
+      <div className="modal-fade-up flex flex-col max-h-[90vh] overflow-hidden rounded-2xl">
+
+        {/* ── Priority color bar at very top ──────────────── */}
+        <div className={`h-1 w-full ${currentPriority.bar} transition-colors duration-300`} />
+
+        {/* ── Header ──────────────────────────────────────── */}
+        <div className="px-6 pt-5 pb-4 border-b border-gray-100 flex items-start justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="text-xl font-bold text-gray-900 w-full bg-transparent border-0
+                         focus:outline-none placeholder-gray-300
+                         border-b-2 border-transparent hover:border-gray-200 focus:border-primary-400
+                         pb-1 transition-colors duration-200"
+              placeholder="Task title"
+            />
+            {/* Breadcrumb badges */}
+            <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                <FileText className="w-3 h-3" />
+                {selectedTask.list?.name ?? 'Unknown list'}
+              </span>
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${currentPriority.pill}`}>
+                <PriorityIcon className="w-3 h-3" />
                 {currentPriority.label}
               </span>
-            )}
+              {dueDateObj && (
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-50 border border-gray-200 ${dueDateColor}`}>
+                  <Calendar className="w-3 h-3" />
+                  {dueDiffDays === 0 ? 'Due today' : dueDiffDays === 1 ? 'Due tomorrow' : dueDiffDays! < 0 ? 'Overdue' : `Due ${dueDateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+                </span>
+              )}
+            </div>
           </div>
+
+          {/* Close button */}
+          <button
+            onClick={handleClose}
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all duration-150 shrink-0"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Main content */}
-          <div className="md:col-span-2 space-y-6">
-            {/* Description */}
-            <div className="bg-gray-50/50 rounded-xl p-4 border border-gray-100">
-              <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                <div className="p-1.5 bg-primary-100 rounded-lg">
-                  <FileText className="w-4 h-4 text-primary-600" />
-                </div>
-                Description
-              </h4>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Add a more detailed description..."
-                className="w-full p-3 bg-white border border-gray-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent min-h-[120px] transition-all shadow-sm"
-              />
-            </div>
+        {/* ── Body ────────────────────────────────────────── */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-0 divide-y md:divide-y-0 md:divide-x divide-gray-100">
 
-            {/* Comments */}
-            <div className="bg-gray-50/50 rounded-xl p-4 border border-gray-100">
-              <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                <div className="p-1.5 bg-blue-100 rounded-lg">
-                  <MessageSquare className="w-4 h-4 text-blue-600" />
-                </div>
-                Comments
-                <span className="ml-auto text-xs font-normal bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">
-                  {comments.length}
-                </span>
-              </h4>
+            {/* Left: description + comments */}
+            <div className="md:col-span-2 p-6 space-y-5">
 
-              {/* Add comment */}
-              <div className="mb-4">
-                <div className="relative">
+              {/* Description */}
+              <section>
+                <label className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2.5">
+                  <FileText className="w-3.5 h-3.5" /> Description
+                </label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Add a more detailed description…"
+                  rows={4}
+                  className="w-full px-3.5 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800
+                             resize-none placeholder-gray-400 transition-all duration-200
+                             focus:outline-none focus:ring-2 focus:ring-primary-400/30 focus:border-primary-400 focus:bg-white"
+                />
+              </section>
+
+              {/* Comments */}
+              <section>
+                <label className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2.5">
+                  <MessageSquare className="w-3.5 h-3.5" /> Comments
+                  {comments.length > 0 && (
+                    <span className="ml-1 px-1.5 py-px text-[10px] font-bold bg-gray-200 text-gray-600 rounded-full">
+                      {comments.length}
+                    </span>
+                  )}
+                </label>
+
+                {/* Composer */}
+                <div className="relative mb-4">
                   <textarea
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
-                    placeholder="Write a comment..."
-                    className="w-full p-3 pr-20 bg-white border border-gray-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all shadow-sm"
+                    placeholder="Write a comment…"
                     rows={2}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                        handleAddComment();
-                      }
-                    }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleAddComment(); }}
+                    className="w-full px-3.5 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm resize-none
+                               placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400/30
+                               focus:border-primary-400 focus:bg-white transition-all duration-200 pr-14"
                   />
-                  <Button
-                    size="sm"
+                  <button
                     onClick={handleAddComment}
                     disabled={!newComment.trim() || isLoading}
-                    className="absolute right-2 bottom-2"
+                    className="absolute right-2.5 bottom-2.5 p-2 bg-primary-600 hover:bg-primary-700
+                               disabled:opacity-40 disabled:cursor-not-allowed
+                               text-white rounded-lg transition-all duration-150 active:scale-95 shadow-sm"
                   >
-                    <Send className="w-4 h-4" />
-                  </Button>
+                    <Send className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-                <p className="text-xs text-gray-400 mt-1.5">Press Ctrl+Enter to send</p>
-              </div>
+                <p className="text-[10px] text-gray-400 -mt-2.5 mb-4">⌘ + Enter to send</p>
 
-              {/* Comment list */}
-              <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
-                {comments.map((comment) => (
-                  <div key={comment.id} className="flex gap-3 group">
-                    <Avatar name={comment.user.name} size="sm" />
-                    <div className="flex-1 bg-white rounded-xl p-3 shadow-sm border border-gray-100">
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <span className="text-sm font-semibold text-gray-900">
-                          {comment.user.name}
-                        </span>
-                        <span className="text-xs text-gray-400">
-                          {new Date(comment.createdAt).toLocaleDateString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </span>
+                {/* Comment list */}
+                <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
+                  {comments.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                      <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center mb-2.5">
+                        <MessageSquare className="w-5 h-5 text-gray-300" />
                       </div>
-                      <p className="text-sm text-gray-600 leading-relaxed">{comment.content}</p>
+                      <p className="text-xs text-gray-400 font-medium">No comments yet</p>
                     </div>
-                  </div>
-                ))}
-                {comments.length === 0 && (
-                  <div className="text-center py-8">
-                    <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                      <MessageSquare className="w-6 h-6 text-gray-400" />
+                  ) : comments.map((comment) => (
+                    <div key={comment.id} className="flex gap-3">
+                      <Avatar name={comment.user.name} size="sm" className="shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline gap-2 mb-1">
+                          <span className="text-[13px] font-semibold text-gray-900">{comment.user.name}</span>
+                          <span className="text-[10px] text-gray-400">
+                            {new Date(comment.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 leading-relaxed bg-gray-50 rounded-xl px-3 py-2 border border-gray-100">
+                          {comment.content}
+                        </p>
+                      </div>
                     </div>
-                    <p className="text-sm text-gray-500">No comments yet</p>
-                    <p className="text-xs text-gray-400 mt-1">Be the first to comment!</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Sidebar */}
-          <div className="space-y-4">
-            {/* Priority */}
-            <div className="bg-gray-50/50 rounded-xl p-4 border border-gray-100">
-              <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                <div className="p-1.5 bg-orange-100 rounded-lg">
-                  <Flag className="w-4 h-4 text-orange-600" />
+                  ))}
                 </div>
-                Priority
-              </h4>
-              <div className="grid grid-cols-2 gap-2">
-                {priorityOptions.map((opt) => {
-                  const Icon = opt.icon;
-                  return (
-                    <button
-                      key={opt.value}
-                      onClick={() => setPriority(opt.value)}
-                      className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-all ${
-                        priority === opt.value
-                          ? `${opt.color} ring-2 ring-offset-1 ring-current`
-                          : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
-                      }`}
-                    >
-                      <Icon className="w-3.5 h-3.5" />
-                      {opt.label}
-                    </button>
-                  );
-                })}
-              </div>
+              </section>
             </div>
 
-            {/* Due Date */}
-            <div className="bg-gray-50/50 rounded-xl p-4 border border-gray-100">
-              <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                <div className="p-1.5 bg-purple-100 rounded-lg">
-                  <Calendar className="w-4 h-4 text-purple-600" />
-                </div>
-                Due Date
-              </h4>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all shadow-sm"
-              />
-            </div>
+            {/* Right: sidebar */}
+            <div className="p-6 space-y-5 bg-gray-50/40">
 
-            {/* Assignees */}
-            <div className="bg-gray-50/50 rounded-xl p-4 border border-gray-100">
-              <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                <div className="p-1.5 bg-teal-100 rounded-lg">
-                  <Users className="w-4 h-4 text-teal-600" />
+              {/* Priority */}
+              <section>
+                <label className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2.5">
+                  <Flag className="w-3.5 h-3.5" /> Priority
+                </label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {priorityOptions.map((opt) => {
+                    const Icon    = opt.icon;
+                    const active  = priority === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        onClick={() => setPriority(opt.value)}
+                        className={`flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl text-[11px] font-semibold border transition-all duration-150 ${
+                          active
+                            ? `${opt.pill} ring-2 ${opt.ring} ring-offset-1`
+                            : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                        {opt.label}
+                      </button>
+                    );
+                  })}
                 </div>
-                Assignees
-                {selectedTask.assignees && selectedTask.assignees.length > 0 && (
-                  <span className="ml-auto text-xs font-normal bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">
-                    {selectedTask.assignees.length}
-                  </span>
-                )}
-              </h4>
-              <div className="space-y-2">
-                {selectedTask.assignees?.map((assignee) => (
-                  <div
-                    key={assignee.id}
-                    className="flex items-center gap-2.5 p-2.5 bg-white rounded-xl border border-gray-100 shadow-sm"
+              </section>
+
+              {/* Due Date */}
+              <section>
+                <label className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2.5">
+                  <Calendar className="w-3.5 h-3.5" /> Due Date
+                </label>
+                <input
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm
+                             focus:outline-none focus:ring-2 focus:ring-primary-400/30 focus:border-primary-400
+                             transition-all duration-200 shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                />
+                {dueDate && (
+                  <button
+                    onClick={() => setDueDate('')}
+                    className="mt-1.5 text-[11px] text-gray-400 hover:text-red-500 transition-colors"
                   >
-                    <Avatar name={assignee.user.name} size="sm" />
-                    <span className="text-sm font-medium text-gray-700">{assignee.user.name}</span>
+                    × Clear date
+                  </button>
+                )}
+              </section>
+
+              {/* Assignees */}
+              <section>
+                <label className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2.5">
+                  <Users className="w-3.5 h-3.5" /> Assignees
+                  {(selectedTask.assignees?.length ?? 0) > 0 && (
+                    <span className="ml-auto px-1.5 py-px text-[10px] font-bold bg-gray-200 text-gray-600 rounded-full">
+                      {selectedTask.assignees!.length}
+                    </span>
+                  )}
+                </label>
+
+                {/* Current assignees */}
+                {(selectedTask.assignees?.length ?? 0) > 0 ? (
+                  <div className="space-y-1.5 mb-3">
+                    {selectedTask.assignees!.map((a) => (
+                      <div key={a.id} className="flex items-center gap-2.5 px-2.5 py-2 bg-white rounded-xl border border-gray-200 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+                        <Avatar name={a.user.name} size="sm" />
+                        <span className="text-[13px] font-medium text-gray-700 truncate">{a.user.name}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-                {(!selectedTask.assignees || selectedTask.assignees.length === 0) && (
-                  <div className="text-center py-4">
-                    <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                      <UserPlus className="w-5 h-5 text-gray-400" />
+                ) : (
+                  <div className="flex items-center justify-center py-5 mb-3 rounded-xl border-2 border-dashed border-gray-200">
+                    <div className="text-center">
+                      <UserPlus className="w-5 h-5 text-gray-300 mx-auto mb-1" />
+                      <p className="text-xs text-gray-400">No assignees</p>
                     </div>
-                    <p className="text-xs text-gray-500">No assignees yet</p>
                   </div>
                 )}
-              </div>
-              
-              {/* Add from board members */}
-              {currentBoard?.members && currentBoard.members.filter(
-                (m) => !selectedTask.assignees?.some((a) => a.userId === m.userId)
-              ).length > 0 && (
-                <div className="mt-3">
+
+                {/* Add member dropdown */}
+                {currentBoard?.members && currentBoard.members.filter(
+                  (m) => !selectedTask.assignees?.some((a) => a.userId === m.userId)
+                ).length > 0 && (
                   <select
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        handleAssign(e.target.value);
-                        e.target.value = '';
-                      }
-                    }}
-                    className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all shadow-sm"
+                    onChange={(e) => { if (e.target.value) { handleAssign(e.target.value); e.target.value = ''; } }}
                     defaultValue=""
+                    className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-600
+                               focus:outline-none focus:ring-2 focus:ring-primary-400/30 focus:border-primary-400
+                               transition-all duration-200 shadow-[0_1px_2px_rgba(0,0,0,0.04)] cursor-pointer"
                   >
-                    <option value="" disabled>+ Add member...</option>
+                    <option value="" disabled>+ Assign a member…</option>
                     {currentBoard.members
-                      .filter(
-                        (m) =>
-                          !selectedTask.assignees?.some((a) => a.userId === m.userId)
-                      )
-                      .map((member) => (
-                        <option key={member.userId} value={member.userId}>
-                          {member.user.name}
-                        </option>
+                      .filter((m) => !selectedTask.assignees?.some((a) => a.userId === m.userId))
+                      .map((m) => (
+                        <option key={m.userId} value={m.userId}>{m.user.name}</option>
                       ))}
                   </select>
-                </div>
-              )}
-            </div>
+                )}
+              </section>
 
-            {/* Actions */}
-            <div className="pt-4 space-y-2">
-              <Button
-                variant="primary"
-                className="w-full justify-center"
-                onClick={handleSave}
-                isLoading={isSaving}
-              >
-                Save Changes
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full justify-center text-red-600 border-red-200 hover:bg-red-50 hover:border-red-300"
-                onClick={handleDelete}
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Delete Task
-              </Button>
+              {/* Actions */}
+              <section className="pt-1 space-y-2">
+                <Button
+                  variant="primary"
+                  className="w-full justify-center !bg-gradient-to-r !from-primary-600 !to-primary-500
+                             hover:!from-primary-700 hover:!to-primary-600 !shadow-md !shadow-primary-500/20
+                             hover:!shadow-lg hover:!-translate-y-0.5 !transition-all !duration-200"
+                  onClick={handleSave}
+                  isLoading={isSaving}
+                >
+                  Save Changes
+                </Button>
+                <button
+                  onClick={handleDelete}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium
+                             text-red-500 border border-red-100 bg-white hover:bg-red-50 hover:border-red-200
+                             transition-all duration-150"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Delete Task
+                </button>
+              </section>
             </div>
           </div>
         </div>
